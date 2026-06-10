@@ -1,8 +1,0 @@
-[Layouts]
- - Layout (1)
-   5 SlotOne
-   5 SlotTwo
-[SlotOne]
-Vivien Reid
-[SlotTwo]
-Mishra's Command

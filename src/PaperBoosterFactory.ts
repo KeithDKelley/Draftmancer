@@ -2,13 +2,22 @@ import { BoosterFactoryOptions, IBoosterFactory } from "./BoosterFactory";
 import { Cards, CardsBySet, getCard, getUnique } from "./Cards.js";
 import { CardID } from "./CardTypes";
 import { Constants } from "./Constants.js";
-import PaperBoosterData from "./data/sealed_extended_data.json" with { type: "json" };
+import PaperBoosterData from "../data/magic-sealed-data/sealed_extended_data.json" with { type: "json" };
 import { SetCode } from "./Types";
 import { random, shuffleArray, weightedRandomIdx } from "./utils.js";
 
 /*
  * Another collation method using data from https://github.com/taw/magic-sealed-data
+ * That repo is a git submodule at data/magic-sealed-data/.
+ * If this import fails at runtime, run: git submodule update --init
  */
+
+if (!Array.isArray(PaperBoosterData) || PaperBoosterData.length === 0)
+	throw new Error(
+		"PaperBoosterFactory: sealed_extended_data.json is empty or missing.\n" +
+			"The magic-sealed-data submodule may not be initialized.\n" +
+			"Run: git submodule update --init"
+	);
 
 class CardInfo {
 	set: string = "";

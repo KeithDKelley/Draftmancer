@@ -1,3 +1,7 @@
+# External data — managed via git submodule (data/magic-sealed-data/)
+# See: git submodule update --init
+src/data/sealed_extended_data.json
+
 # Logs
 logs
 *.log

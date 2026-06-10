@@ -1,13 +1,11 @@
 {
-	/* Visit https://aka.ms/tsconfig.json to read more about this file */
-	"include": ["src/**/*.ts", "test/**/*.js", "test/**/*.ts"],
-	"exclude": ["node_modules", "client"],
+	"include": ["src/**/*.ts"],
+	"exclude": ["node_modules"],
 	"compilerOptions": {
 		"resolveJsonModule": true,
 		"typeRoots": ["src/types", "node_modules/@types"],
 		"target": "esnext",
 		"module": "ESNext",
-		"allowJs": true,
 		"outDir": "dist",
 		"rootDir": ".",
 		"strict": true,

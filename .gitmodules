@@ -1,0 +1,3 @@
+[submodule "data/magic-sealed-data"]
+	path = data/magic-sealed-data
+	url = https://github.com/taw/magic-sealed-data.git

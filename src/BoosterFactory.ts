@@ -4,7 +4,7 @@ import { shuffleArray, Options, random, getRandom, cumulativeSum, chooseWeighted
 import { pickCard } from "./cardUtils.js";
 import { BasicLandSlot } from "./LandSlot.js";
 import { MessageError, isMessageError } from "./Message.js";
-import { Session } from "./Session.js";
+import { ICardCollection } from "./ICardCollection.js";
 
 // Generates booster for regular MtG Sets
 
@@ -245,7 +245,7 @@ export type BoosterFactoryOptions = {
 	mythicPromotion?: boolean;
 	mythicRate?: number;
 	colorBalance?: boolean;
-	session?: Session;
+	session?: ICardCollection;
 	maxDuplicates?: Record<string, number>;
 	bonusSheet?: number;
 };

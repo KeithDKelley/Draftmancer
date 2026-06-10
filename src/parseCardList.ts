@@ -19,7 +19,6 @@ import {
 	isString,
 	isUnknown,
 } from "./TypeChecks.js";
-import { DraftmancerAI } from "./bots/DraftmancerAI.js";
 
 const lineRegex =
 	/^(?:(?<count>\d+)\s+)?(?<name>[^\v\n]+?)(?:\s+\((?<set>\w+)\)(?:\s+(?<number>[^+\s()]+))?)?(?:\s+\+?(F))?$/;
@@ -490,9 +489,6 @@ function parseSettings(
 
 	if ("botModel" in parsedSettings) {
 		if (!isString(parsedSettings.botModel)) return err(`'botModel' must be a string.`);
-		// NOTE: This is currently our only source of set specific bot models.
-		if (!DraftmancerAI.models.includes(parsedSettings.botModel))
-			return err(`Model '${parsedSettings.botModel}' is not available.`);
 		settings.botModel = parsedSettings.botModel;
 	}
 

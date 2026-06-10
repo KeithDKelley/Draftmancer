@@ -1,0 +1,219 @@
+DRAFTMANCER PACK GENERATION LIBRARY - EFFORT ESTIMATE
+======================================================
+Date: 2026-06-10
+Repo: https://github.com/KeithDKelley/Draftmancer (forked from Senryoku/Draftmancer)
+Goal: Strip everything except pack/booster generation into a standalone TS library.
+
+
+WHAT WE WANT TO KEEP
+---------------------
+The pack generation surface is actually well-contained:
+
+  src/BoosterFactory.ts         (5016 lines)  - Core. All set-specific factories, color
+                                                 balancing, foil logic. This IS the library.
+  src/PaperBoosterFactory.ts    ( 232 lines)  - Data-driven collation from magic-sealed-data.
+  src/Cards.ts                  ( 186 lines)  - Card DB loader (reads data/MTGCards.*.json).
+  src/CardTypes.ts              ( 157 lines)  - Type definitions.
+  src/CardPool.ts               (  87 lines)  - CardPool data structure.
+  src/LandSlot.ts               ( 286 lines)  - Land slot logic for boosters.
+  src/utils.ts                  ( 164 lines)  - RNG utilities (random, shuffle, etc).
+  src/cardUtils.ts              ( 130 lines)  - Card-picking helpers.
+  src/Message.ts                ( 100 lines)  - MessageError (error signaling type).
+  src/Constants.ts              (  25 lines)  - Global constants.
+  src/Types.ts                  (  small  )   - SetCode and shared types.
+  src/SetInfos.ts               (  13 lines)  - Set info helpers.
+  src/Jumpstart.ts              ( 230 lines)  - Jumpstart pack generation (keep if wanted).
+  src/CustomCardList.ts         (  61 lines)  - Custom card list types.
+  src/CustomCardListUtils.ts    ( 383 lines)  - Custom cube/card list booster generation.
+  src/parseCardList.ts          ( 955 lines)  - Card list parser (needed for custom lists).
+  src/CustomCards.ts            ( 335 lines)  - Custom card definitions.
+  src/CustomCardID.ts           (  small  )   - Custom card ID handling.
+  src/data/                     (all JSON)    - Jumpstart, set infos, The List, etc.
+  data/MTGCards.*.json          (large  )     - The card database (~4 shards).
+
+
+WHAT GETS DELETED (~19,000 lines of server/client/infra code)
+--------------------------------------------------------------
+  src/server.ts                 (2370)   - Express + socket.io server
+  src/Session.ts                (3988)   - Full session management (multiplayer state)
+  src/Session/SessionProps.ts           - Session configuration props
+  src/Session/SessionTypes.ts           - Session types
+  src/Connection.ts             (  51)   - WebSocket connection tracking
+  src/Persistence.ts            ( 455)   - File/DB persistence (storing sessions)
+  src/SocketType.ts             ( 481)   - socket.io event type definitions
+  src/Brackets.ts               ( 459)   - Tournament bracket support
+  src/BracketSerialization.ts           - Bracket serialization
+  src/Bot.ts                    ( 312)   - Bot/AI player logic
+  src/bots/                     (all)    - Bot implementations (DraftmancerAI, MTGDraftBots, etc.)
+  src/BotTrainingAPI.ts                 - Bot training data API
+  src/DraftState.ts             ( 176)   - Draft state machine
+  src/IDraftState.ts                    - Draft state interface
+  src/GridDraft.ts                      - Grid draft mode
+  src/HousmanDraft.ts                   - Housman draft mode
+  src/MinesweeperDraft.ts+types         - Minesweeper draft mode
+  src/RochesterDraft.ts                 - Rochester draft mode
+  src/RotisserieDraft.ts                - Rotisserie draft mode
+  src/SilentAuctionDraft.ts             - Silent auction draft mode
+  src/SolomonDraft.ts                   - Solomon draft mode
+  src/TeamSealed.ts                     - Team sealed format
+  src/WinchesterDraft.ts                - Winchester draft mode
+  src/WinstonDraft.ts                   - Winston draft mode
+  src/DraftLog.ts               ( 101)   - Draft pick logging
+  src/DeckHashes.ts                     - Deck hash computation
+  src/PickSummary.ts                    - Pick summary types
+  src/Conspiracy.ts                     - Conspiracy card effects
+  src/MTGOAPI.ts                        - MTGO API integration
+  src/parseMTGOLog.ts                   - MTGO log parser
+  src/parseCSV.ts                       - CSV parser
+  src/parseCost.ts                      - Mana cost parser
+  src/cubeCobraIntegration.ts   ( 490)   - CubeCobra API integration
+  src/draftQueue/                       - Draft queue system
+  src/Context.ts                        - Server context
+  src/IDTypes.ts                        - UserID/SessionID types
+  src/TypeChecks.ts                     - Runtime type guards
+  src/Message.ts                ( 100)   - Partially (keep MessageError; drop socket errors)
+  client/                       (~23k)   - Entire Vue.js frontend
+  .github/                              - CI workflows
+  ManageCardData.py                     - Card data management script
+  scripts/                              - Data processing scripts
+  nginx.conf, Dockerfile                - Deployment infrastructure
+
+
+THE MAIN TECHNICAL PROBLEM: SESSION COUPLING
+---------------------------------------------
+BoosterFactory.ts imports Session directly. Session.ts is 3988 lines and drags in
+the entire server graph (connections, bots, persistence, all draft modes, brackets...).
+
+Session is used in only ~5-8 spots in BoosterFactory.ts, and only for two things:
+
+  options.session.unrestrictedCardPool(): boolean
+  options.session.restrictedCollection(sets: string[]): CardPool
+
+The fix is simple but must be done deliberately:
+  1. Create a thin ICardCollection interface with just those two methods.
+  2. Swap the Session import in BoosterFactory for ICardCollection.
+  3. Delete Session.ts and its entire import chain.
+
+This is a ~1 hour code change but has to be done before anything else compiles.
+
+
+WORK BREAKDOWN
+--------------
+
+Task 1: Session decoupling (~1 day)
+  - Extract ICardCollection interface (2 methods).
+  - Fix the ~8 Session references in BoosterFactory.ts to use the interface.
+  - Fix same issue in PaperBoosterFactory.ts and Jumpstart.ts if present.
+  - Delete Session.ts; verify no other keepable files import it directly.
+  Risk: Low. The changes are mechanical and localized.
+
+Task 2: Delete dead code (~0.5 days)
+  - Delete all the files listed in "WHAT GETS DELETED" above.
+  - Fix any import errors that surface in kept files after deletion.
+  - The client/ directory is entirely self-contained; delete in one shot.
+  Risk: Low. Mostly deletion.
+
+Task 3: Data loading redesign (~1-2 days)
+  Cards.ts uses TOP-LEVEL AWAIT to glob + stream JSON from disk at module init time.
+  This is fine for a server process but is surprising in a library:
+    - Library consumers don't control when/where data loads.
+    - Hardcoded paths ('data/MTGCards.*.json') break if library is installed elsewhere.
+  Options (need to pick one):
+    A. Keep as-is; document that consumers must have the data directory present and
+       set a DATA_PATH env variable. Minimal change (~2 hours).
+    B. Export an init(dataPath) async function; keep top-level await but defer to it.
+       (~4 hours)
+    C. Bundle the card data into the library via JSON imports (increases bundle size
+       significantly, but zero config for consumers). (~4-6 hours, needs eval of
+       bundle size impact - the 4 JSON shards are large).
+  Recommendation: Option B for now; Option C later if bundle size is acceptable.
+  Risk: Medium. Top-level await behavior + data path resolution need testing.
+
+Task 4: Library entry point & API design (~1-2 days)
+  No clean public API exists today. The library currently exposes:
+    - getBoosterFactory(set, cardPool, landSlot, options)
+    - PaperBoosterFactory class + getPaperBoosterFactory(set, options)
+    - ColorBalancedSlot, BoosterFactory (base class)
+  We need to decide what the public API surface looks like. Minimum:
+    - generateBooster(set: string, options?: BoosterOptions): UniqueCard[]
+    - generateCustomBooster(cardList: ParsedCardList, options?): UniqueCard[]
+    - generateJumpstartPacks(set?, options?): UniqueCard[][]
+    - loadCards(dataPath: string): Promise<void>   (if Option B above)
+  This is 1 day of thinking/writing the wrapper + 0.5 day cleaning up types
+  for external consumption (some types are internal; need to audit what to export).
+  Risk: Low-medium. Mostly design work.
+
+Task 5: Build system cleanup (~0.5-1 day)
+  Current build:
+    - webpack for client bundle (Vue + all front-end assets)
+    - tsc for server TypeScript
+    - package.json has deps for: express, socket.io, vue, webpack, puppeteer, etc.
+  Target:
+    - tsc only, targeting ESM or CJS library output.
+    - package.json: drop all server/client/test deps; keep only the ones actually
+      used by the kept code (currently just: glob, JSONStream, and dev tools).
+    - tsconfig.json: switch from app to library config (declarationDir, etc.).
+  Risk: Low. Mostly package.json + tsconfig changes.
+
+Task 6: Test harness rewrite (~1-2 days)
+  Existing tests are integration tests that spin up the full server via socket.io
+  and drive it through HTTP/WebSocket calls. None of them will work after the server
+  is gone.
+  The good news: the existing tests/data/ directory has extensive .txt card list
+  fixture files that cover a lot of cases. We can reuse those.
+  Work is: write new unit tests that directly call the pack generation functions
+  using those fixtures, without a server. Mocha/chai is already the test framework.
+  Risk: Low-medium. Rewriting tests from scratch is annoying but the fixtures exist.
+
+
+TOTAL ESTIMATE: 5–8 days
+-------------------------
+  Task 1 (Session decoupling)     1 day
+  Task 2 (Dead code deletion)     0.5 days
+  Task 3 (Data loading)           1-2 days
+  Task 4 (Library API)            1-2 days
+  Task 5 (Build system)           0.5-1 day
+  Task 6 (Tests)                  1-2 days
+  ------------------------------------------
+  Total                           5-8 days
+
+Low end (5 days): Option A for data loading, minimal API surface, light testing.
+High end (8 days): Option B/C for data loading, clean typed API, solid test coverage.
+
+
+NOTABLE NON-OBVIOUS THINGS
+---------------------------
+1. BoosterFactory.ts is 5000 lines but it's actually very well-structured — it's just
+   one base class + ~40 set-specific subclasses. It reads clean. No major refactor
+   needed to make it a library; it just needs its Session dependency cut.
+
+2. The card data is split into 4 shards (MTGCards.0.json through MTGCards.3.json) plus
+   a separate mb1_cards.json. These are in /data/ (not /src/data/). Total card data
+   size should be checked before deciding on bundling.
+
+3. PaperBoosterFactory uses a third-party data format from magic-sealed-data
+   (sealed_extended_data.json in src/data/). It's already bundled. No external API
+   calls at runtime.
+
+4. The Jumpstart implementation (Jumpstart.ts) does NOT share the Session coupling
+   problem. It only depends on Cards.ts and utils.ts.
+
+5. Custom card list support (parseCardList.ts + CustomCardListUtils.ts) is genuinely
+   useful for a pack generation library — letting consumers pass arbitrary card lists
+   and get generated packs back. Worth keeping.
+
+6. CubeCobra integration (cubeCobraIntegration.ts, 490 lines) makes HTTP calls to
+   an external API. Delete it from the library; consumers who want CubeCobra support
+   can fetch the data themselves and pass it to parseCardList.
+
+
+WHAT TO DO FIRST
+----------------
+Before writing any code, decide:
+  a) Should card data be bundled into the library NPM package, or loaded from disk?
+  b) What's the target: ESM, CJS, or dual? (Affects tsconfig and build setup.)
+  c) Should Jumpstart pack generation be in scope?
+  d) Should custom card list (cube) generation be in scope?
+
+Those 4 decisions gate Task 3 and Task 4 and will determine the final shape of
+the library's public API.
