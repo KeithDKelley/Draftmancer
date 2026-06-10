@@ -6,7 +6,7 @@ export { Cards, getCard, getUnique, getCardByName, getCardVersionsByName, isVali
 export type { CardID, Card, UniqueCard } from "./CardTypes.js";
 export { CardPool } from "./CardPool.js";
 export type { SlotedCardPool } from "./CardPool.js";
-export { SpecialLandSlots } from "./LandSlot.js";
+export { SpecialLandSlots, BasicLandSlots } from "./LandSlot.js";
 export type { ICardCollection } from "./ICardCollection.js";
 export { MessageError, isMessageError } from "./Message.js";
 export { parseCardList, parseLine } from "./parseCardList.js";
